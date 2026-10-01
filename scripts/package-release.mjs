@@ -296,10 +296,18 @@ export async function packageRelease(options = {}) {
   // Compute checksum
   const checksum = crypto.createHash('sha256').update(zipBuffer).digest('hex');
 
-  // Destination zip path
+  // Destination zip path (write atomically via temp file to avoid 0-byte read windows)
   const outputName = `${manifest.id}.zip`;
   const outputPath = path.join(rootDir, outputName);
-  fs.writeFileSync(outputPath, zipBuffer);
+  const tempPath = path.join(rootDir, `.${outputName}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`);
+  fs.writeFileSync(tempPath, zipBuffer);
+  try {
+    fs.renameSync(tempPath, outputPath);
+  } catch {
+    // Fallback if cross-device or lock contention on Windows:
+    fs.copyFileSync(tempPath, outputPath);
+    try { fs.unlinkSync(tempPath); } catch {}
+  }
 
   const uncompressedSize = fileEntries.reduce((sum, f) => sum + f.data.length, 0);
 
