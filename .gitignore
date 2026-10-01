@@ -6,3 +6,10 @@ Thumbs.db
 *.tmp
 foundry-ttrpg-vault.zip
 dist/*.zip
+
+# LevelDB database runtime lock and log files
+**/LOCK
+**/LOG*
+**/MANIFEST-*
+**/CURRENT
+**/*.ldb

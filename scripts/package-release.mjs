@@ -269,8 +269,8 @@ export async function packageRelease(options = {}) {
   const includeDirs = ['dist', 'styles', 'templates', 'languages', 'packs'];
   for (const dirName of includeDirs) {
     const dirPath = path.join(rootDir, dirName);
-    // Exclude packs/_source from distribution zip (it's source only)
-    const excludes = dirName === 'packs' ? ['packs/_source', '_source'] : [];
+    // Exclude packs/_source and LevelDB runtime LOCK/LOG files from distribution zip
+    const excludes = dirName === 'packs' ? ['packs/_source', '_source', 'LOCK', 'LOG', 'LOG.old'] : ['LOCK'];
     const collected = collectFiles(dirPath, rootDir, excludes);
 
     for (const f of collected) {

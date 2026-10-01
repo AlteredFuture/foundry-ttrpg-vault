@@ -504,6 +504,149 @@ async function preloadTemplates() {
   ];
   return loadTemplates(templatePaths);
 }
+function injectCompendiumImportButton(html) {
+  var _a;
+  if (!((_a = game == null ? void 0 : game.user) == null ? void 0 : _a.isGM)) return;
+  let root = null;
+  if (html instanceof HTMLElement) {
+    root = html;
+  } else if (html && html[0] instanceof HTMLElement) {
+    root = html[0];
+  } else if (typeof (html == null ? void 0 : html.get) === "function") {
+    root = html.get(0);
+  }
+  if (!root) {
+    root = document.querySelector('#compendium, .compendium-sidebar, [data-tab="compendium"]');
+  }
+  if (!root) return;
+  if (root.querySelector(".vault-import-btn")) return;
+  const btnContainer = document.createElement("div");
+  btnContainer.className = "header-actions action-buttons flexrow vault-sidebar-actions";
+  btnContainer.style.marginTop = "4px";
+  btnContainer.style.marginBottom = "4px";
+  const btnTitle = game.i18n.localize("VAULT.Dialog.OpenButtonHint") || "Import to TTRPG Vault";
+  const btnLabel = game.i18n.localize("VAULT.Dialog.OpenButton") || "Vault Import";
+  btnContainer.innerHTML = `
+    <button class="vault-import-btn" type="button" title="${btnTitle}" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 8px; font-weight: bold;">
+      <i class="fas fa-book-sparkles"></i> <span>${btnLabel}</span>
+    </button>
+  `;
+  const btn = btnContainer.querySelector(".vault-import-btn");
+  btn.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    api.openImportDialog();
+  });
+  const footer = root.querySelector(".directory-footer");
+  const headerActions = root.querySelector(".header-actions");
+  const actionButtons = root.querySelector(".action-buttons");
+  if (footer) {
+    footer.appendChild(btnContainer);
+  } else if (headerActions) {
+    headerActions.insertAdjacentElement("afterend", btnContainer);
+  } else if (actionButtons) {
+    actionButtons.insertAdjacentElement("afterend", btnContainer);
+  } else {
+    root.appendChild(btnContainer);
+  }
+}
+class VaultImportDialog {
+  static async show() {
+    const templatePath = `modules/${MODULE_ID}/templates/import-dialog.hbs`;
+    const content = await renderTemplate(templatePath, {});
+    const dialog = new Dialog(
+      {
+        title: `${MODULE_TITLE} — ${game.i18n.localize("VAULT.Dialog.Title") || "Import Data"}`,
+        content,
+        buttons: {},
+        render: (html) => {
+          const el = html instanceof HTMLElement ? html : html[0];
+          const fileInput = el.querySelector("#vault-file-picker");
+          const dropzone = el.querySelector("#vault-dropzone");
+          const preview = el.querySelector(".vault-selected-preview");
+          const previewText = el.querySelector(".vault-preview-text");
+          const cancelBtn = el.querySelector("#vault-cancel-btn");
+          const form = el.querySelector(".vault-import-form");
+          if (dropzone && fileInput) {
+            dropzone.addEventListener("click", () => fileInput.click());
+            dropzone.addEventListener("dragover", (e) => {
+              e.preventDefault();
+              dropzone.classList.add("dragover");
+            });
+            dropzone.addEventListener("dragleave", () => {
+              dropzone.classList.remove("dragover");
+            });
+            dropzone.addEventListener("drop", (e) => {
+              var _a;
+              e.preventDefault();
+              dropzone.classList.remove("dragover");
+              if ((_a = e.dataTransfer.files) == null ? void 0 : _a.length) {
+                fileInput.files = e.dataTransfer.files;
+                handleFileSelection(fileInput.files[0]);
+              }
+            });
+            fileInput.addEventListener("change", () => {
+              var _a;
+              if ((_a = fileInput.files) == null ? void 0 : _a.length) {
+                handleFileSelection(fileInput.files[0]);
+              }
+            });
+          }
+          function handleFileSelection(file) {
+            if (!file) return;
+            if (preview && previewText) {
+              preview.style.display = "flex";
+              previewText.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
+            }
+          }
+          if (cancelBtn) {
+            cancelBtn.addEventListener("click", () => dialog.close());
+          }
+          if (form) {
+            form.addEventListener("submit", async (e) => {
+              var _a;
+              e.preventDefault();
+              const selectedFile = (_a = fileInput == null ? void 0 : fileInput.files) == null ? void 0 : _a[0];
+              if (!selectedFile) {
+                ui.notifications.warn(game.i18n.localize("VAULT.Notifications.NoFileSelected") || "Please select a JSON or ZIP file to import.");
+                return;
+              }
+              const progressContainer = el.querySelector("#vault-progress-container");
+              el.querySelector("#vault-progress-fill");
+              el.querySelector("#vault-progress-label");
+              const submitBtn = el.querySelector("#vault-start-import-btn");
+              if (progressContainer) progressContainer.style.display = "block";
+              if (submitBtn) submitBtn.disabled = true;
+              try {
+                const text = await selectedFile.text();
+                const payload = JSON.parse(text);
+                ui.notifications.info(`${MODULE_TITLE}: Processing payload...`);
+                Hooks.callAll("ttrpgVault.processPayload", payload, {
+                  dialog,
+                  file: selectedFile
+                });
+                ui.notifications.info(`${MODULE_TITLE}: Ingestion complete!`);
+                dialog.close();
+              } catch (err) {
+                logger.error("Failed to parse import payload:", err);
+                ui.notifications.error(`Failed to import: ${err.message}`);
+                if (submitBtn) submitBtn.disabled = false;
+              }
+            });
+          }
+        },
+        default: "cancel"
+      },
+      {
+        width: 480,
+        height: "auto",
+        classes: ["dialog", "vault-import-dialog"]
+      }
+    );
+    dialog.render(true);
+    return dialog;
+  }
+}
 const api = {
   version: "1.0.0",
   logger,
@@ -513,9 +656,11 @@ const api = {
   generateSpellFallback,
   generateWeaponFallback,
   generateFeatFallback,
+  injectButton: injectCompendiumImportButton,
   openImportDialog() {
     logger.info("Opening TTRPG Vault Import Dialog");
     Hooks.callAll("ttrpgVault.openImportDialog");
+    return VaultImportDialog.show();
   },
   getPack(packName) {
     return game.packs.get(`${MODULE_ID}.${packName}`);
@@ -540,26 +685,18 @@ if (typeof Hooks !== "undefined") {
     if (module) {
       module.api = api;
     }
+    setTimeout(() => {
+      injectCompendiumImportButton();
+    }, 250);
     Hooks.callAll("ttrpgVault.ready", api);
   });
   Hooks.on("renderCompendiumDirectory", (app, html, data) => {
-    if (!game.user.isGM) return;
-    const buttonHtml = `
-      <div class="header-actions action-buttons flexrow vault-sidebar-actions">
-        <button class="vault-import-btn" type="button" title="${game.i18n.localize("VAULT.Dialog.OpenButtonHint")}">
-          <i class="fas fa-book-sparkles"></i> ${game.i18n.localize("VAULT.Dialog.OpenButton")}
-        </button>
-      </div>
-    `;
-    const footer = html.find(".directory-footer");
-    if (footer.length) {
-      footer.append(buttonHtml);
-    } else {
-      html.find(".header-actions").after(buttonHtml);
+    injectCompendiumImportButton(html);
+  });
+  Hooks.on("renderSidebarTab", (app, html, data) => {
+    if ((app == null ? void 0 : app.tabName) === "compendium" || (app == null ? void 0 : app.id) === "compendium" || (html == null ? void 0 : html.id) === "compendium") {
+      injectCompendiumImportButton(html);
     }
-    html.find(".vault-import-btn").on("click", () => {
-      api.openImportDialog();
-    });
   });
 }
 export {
