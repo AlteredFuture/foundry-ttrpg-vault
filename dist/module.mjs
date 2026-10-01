@@ -504,30 +504,199 @@ async function preloadTemplates() {
   ];
   return loadTemplates(templatePaths);
 }
-function injectCompendiumImportButton(html) {
+async function importPayloadToCompendiums(payload, options = {}) {
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
+  const targetPackOption = options.targetPack || "auto";
+  const taxonomy = options.taxonomy || "source";
+  const deduplication = options.deduplication || "update";
+  const onProgress = options.onProgress || (() => {
+  });
+  let entities = [];
+  if (Array.isArray(payload)) {
+    entities = payload;
+  } else if (payload && typeof payload === "object") {
+    if (Array.isArray(payload.successes)) {
+      entities = payload.successes;
+    } else if (Array.isArray(payload.actors)) {
+      entities = payload.actors;
+    } else if (Array.isArray(payload.monsters)) {
+      entities = payload.monsters;
+    } else if (Array.isArray(payload.items)) {
+      entities = payload.items;
+    } else if (Array.isArray(payload.spells)) {
+      entities = payload.spells;
+    } else if (Array.isArray(payload.journals)) {
+      entities = payload.journals;
+    } else if (payload.name) {
+      entities = [payload];
+    } else {
+      for (const val of Object.values(payload)) {
+        if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object") {
+          entities.push(...val);
+        }
+      }
+    }
+  }
+  if (entities.length === 0) {
+    throw new Error("No valid entity records found in the import payload.");
+  }
+  let createdCount = 0;
+  let updatedCount = 0;
+  let skippedCount = 0;
+  const affectedPacks = /* @__PURE__ */ new Set();
+  for (let i = 0; i < entities.length; i++) {
+    const rawDoc = entities[i];
+    if (!rawDoc || typeof rawDoc !== "object") continue;
+    const percent = Math.round((i + 1) / entities.length * 100);
+    onProgress({
+      current: i + 1,
+      total: entities.length,
+      name: rawDoc.name || "Document",
+      percent
+    });
+    let packName = targetPackOption;
+    if (packName === "auto") {
+      const type = String(rawDoc.type || rawDoc.entity_type || rawDoc.entityType || "").toLowerCase();
+      if (type === "npc" || type === "character" || type === "monster" || ((_a = rawDoc.system) == null ? void 0 : _a.abilities)) {
+        packName = "vault-monsters";
+      } else if (type === "spell") {
+        packName = "vault-spells";
+      } else if (type === "journal" || rawDoc.pages) {
+        packName = "vault-journals";
+      } else {
+        packName = "vault-items";
+      }
+    }
+    const fullPackId = packName.includes(".") ? packName : `${MODULE_ID}.${packName}`;
+    let pack = game.packs.get(fullPackId);
+    if (!pack) {
+      pack = game.packs.find(
+        (p) => p.metadata.name === packName || p.metadata.id === packName || p.metadata.label === packName
+      );
+    }
+    if (!pack) {
+      logger.warn(`Pack "${fullPackId}" not found. Falling back to default.`);
+      pack = game.packs.get(`${MODULE_ID}.vault-monsters`) || game.packs.get(`${MODULE_ID}.vault-items`);
+    }
+    if (!pack) {
+      throw new Error(`Unable to locate target compendium pack for "${rawDoc.name}".`);
+    }
+    affectedPacks.add(pack);
+    if (pack.locked) {
+      try {
+        await pack.configure({ locked: false });
+      } catch (err) {
+        logger.warn(`Could not unlock pack ${pack.collection}:`, err);
+      }
+    }
+    const docData = foundry.utils ? foundry.utils.deepClone(rawDoc) : JSON.parse(JSON.stringify(rawDoc));
+    if (taxonomy !== "flat" && pack.folders) {
+      let folderName = null;
+      if (taxonomy === "source") {
+        folderName = ((_c = (_b = docData.flags) == null ? void 0 : _b.ttrpgVault) == null ? void 0 : _c.source) || ((_e = (_d = docData.system) == null ? void 0 : _d.details) == null ? void 0 : _e.source) || "Source Documents";
+      } else if (taxonomy === "type") {
+        folderName = ((_h = (_g = (_f = docData.system) == null ? void 0 : _f.details) == null ? void 0 : _g.type) == null ? void 0 : _h.value) || docData.type || "Entities";
+      } else if (taxonomy === "cr") {
+        folderName = ((_j = (_i = docData.system) == null ? void 0 : _i.details) == null ? void 0 : _j.cr) != null ? `CR ${docData.system.details.cr}` : "CR Unrated";
+      }
+      if (folderName) {
+        let folder = pack.folders.find((f) => f.name.toLowerCase() === folderName.toLowerCase());
+        if (!folder && typeof Folder !== "undefined") {
+          try {
+            folder = await Folder.create({ name: folderName, type: pack.documentName }, { pack: pack.collection });
+          } catch (e) {
+            logger.warn(`Could not create folder "${folderName}" in ${pack.collection}:`, e);
+          }
+        }
+        if (folder) {
+          docData.folder = folder.id;
+        }
+      }
+    }
+    const index = await pack.getIndex({ fields: ["name", "flags"] });
+    const sourceId = ((_l = (_k = docData.flags) == null ? void 0 : _k.ttrpgVault) == null ? void 0 : _l.sourceId) || ((_n = (_m = docData.flags) == null ? void 0 : _m.ttrpgVault) == null ? void 0 : _n.source_id);
+    let existingEntry = null;
+    if (sourceId) {
+      existingEntry = index.find(
+        (e) => {
+          var _a2, _b2, _c2, _d2;
+          return ((_b2 = (_a2 = e.flags) == null ? void 0 : _a2.ttrpgVault) == null ? void 0 : _b2.sourceId) === sourceId || ((_d2 = (_c2 = e.flags) == null ? void 0 : _c2.ttrpgVault) == null ? void 0 : _d2.source_id) === sourceId;
+        }
+      );
+    }
+    if (!existingEntry && docData._id) {
+      existingEntry = index.get(docData._id);
+    }
+    if (!existingEntry && docData.name) {
+      existingEntry = index.find(
+        (e) => {
+          var _a2;
+          return ((_a2 = e.name) == null ? void 0 : _a2.trim().toLowerCase()) === docData.name.trim().toLowerCase();
+        }
+      );
+    }
+    if (existingEntry) {
+      if (deduplication === "skip") {
+        skippedCount++;
+        continue;
+      } else if (deduplication === "update") {
+        const existingDoc = await pack.getDocument(existingEntry._id);
+        if (existingDoc) {
+          delete docData._id;
+          await existingDoc.update(docData);
+          updatedCount++;
+          continue;
+        }
+      }
+    }
+    if (deduplication === "duplicate" || !docData._id || !/^[a-zA-Z0-9]{16}$/.test(docData._id)) {
+      delete docData._id;
+    }
+    await pack.documentClass.create(docData, { pack: pack.collection });
+    createdCount++;
+  }
+  for (const pack of affectedPacks) {
+    try {
+      await pack.getIndex();
+      if (pack.apps) {
+        for (const app of Object.values(pack.apps)) app.render(false);
+      }
+    } catch (e) {
+    }
+  }
+  (_o = ui.compendium) == null ? void 0 : _o.render(false);
+  return {
+    total: entities.length,
+    created: createdCount,
+    updated: updatedCount,
+    skipped: skippedCount
+  };
+}
+function injectCompendiumImportButton() {
   var _a;
   if (!((_a = game == null ? void 0 : game.user) == null ? void 0 : _a.isGM)) return;
-  let root = null;
-  if (html instanceof HTMLElement) {
-    root = html;
-  } else if (html && html[0] instanceof HTMLElement) {
-    root = html[0];
-  } else if (typeof (html == null ? void 0 : html.get) === "function") {
-    root = html.get(0);
+  const strayButtons = document.querySelectorAll(
+    '#sidebar-tabs .vault-sidebar-actions, #sidebar-tabs .vault-import-btn, [data-action="tab"][data-tab="compendium"] .vault-sidebar-actions, a[data-tab="compendium"] .vault-sidebar-actions'
+  );
+  strayButtons.forEach((el) => el.remove());
+  const compendium = document.querySelector("#compendium");
+  if (!compendium) return;
+  let footer = compendium.querySelector(".directory-footer");
+  if (!footer) {
+    footer = document.createElement("footer");
+    footer.className = "directory-footer action-buttons flexcol";
+    compendium.appendChild(footer);
   }
-  if (!root) {
-    root = document.querySelector('#compendium, .compendium-sidebar, [data-tab="compendium"]');
-  }
-  if (!root) return;
-  if (root.querySelector(".vault-import-btn")) return;
+  if (footer.querySelector(".vault-import-btn")) return;
   const btnContainer = document.createElement("div");
   btnContainer.className = "header-actions action-buttons flexrow vault-sidebar-actions";
-  btnContainer.style.marginTop = "4px";
-  btnContainer.style.marginBottom = "4px";
+  btnContainer.style.width = "100%";
+  btnContainer.style.marginTop = "6px";
+  btnContainer.style.marginBottom = "6px";
   const btnTitle = game.i18n.localize("VAULT.Dialog.OpenButtonHint") || "Import to TTRPG Vault";
-  const btnLabel = game.i18n.localize("VAULT.Dialog.OpenButton") || "Vault Import";
+  const btnLabel = game.i18n.localize("VAULT.Dialog.OpenButton") || "Import from Vault";
   btnContainer.innerHTML = `
-    <button class="vault-import-btn" type="button" title="${btnTitle}" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 8px; font-weight: bold;">
+    <button class="vault-import-btn" type="button" title="${btnTitle}" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 10px; font-weight: bold; cursor: pointer;">
       <i class="fas fa-book-sparkles"></i> <span>${btnLabel}</span>
     </button>
   `;
@@ -537,18 +706,7 @@ function injectCompendiumImportButton(html) {
     ev.stopPropagation();
     api.openImportDialog();
   });
-  const footer = root.querySelector(".directory-footer");
-  const headerActions = root.querySelector(".header-actions");
-  const actionButtons = root.querySelector(".action-buttons");
-  if (footer) {
-    footer.appendChild(btnContainer);
-  } else if (headerActions) {
-    headerActions.insertAdjacentElement("afterend", btnContainer);
-  } else if (actionButtons) {
-    actionButtons.insertAdjacentElement("afterend", btnContainer);
-  } else {
-    root.appendChild(btnContainer);
-  }
+  footer.appendChild(btnContainer);
 }
 class VaultImportDialog {
   static async show() {
@@ -604,31 +762,44 @@ class VaultImportDialog {
           }
           if (form) {
             form.addEventListener("submit", async (e) => {
-              var _a;
+              var _a, _b, _c, _d;
               e.preventDefault();
               const selectedFile = (_a = fileInput == null ? void 0 : fileInput.files) == null ? void 0 : _a[0];
               if (!selectedFile) {
-                ui.notifications.warn(game.i18n.localize("VAULT.Notifications.NoFileSelected") || "Please select a JSON or ZIP file to import.");
+                ui.notifications.warn(
+                  game.i18n.localize("VAULT.Notifications.NoFileSelected") || "Please select a JSON or ZIP file to import."
+                );
                 return;
               }
               const progressContainer = el.querySelector("#vault-progress-container");
-              el.querySelector("#vault-progress-fill");
-              el.querySelector("#vault-progress-label");
+              const progressFill = el.querySelector("#vault-progress-fill");
+              const progressLabel = el.querySelector("#vault-progress-label");
               const submitBtn = el.querySelector("#vault-start-import-btn");
               if (progressContainer) progressContainer.style.display = "block";
               if (submitBtn) submitBtn.disabled = true;
+              const targetPack = ((_b = el.querySelector("#vault-target-pack")) == null ? void 0 : _b.value) || "auto";
+              const taxonomy = ((_c = el.querySelector("#vault-taxonomy")) == null ? void 0 : _c.value) || "source";
+              const deduplication = ((_d = el.querySelector("#vault-deduplication")) == null ? void 0 : _d.value) || "update";
               try {
                 const text = await selectedFile.text();
                 const payload = JSON.parse(text);
                 ui.notifications.info(`${MODULE_TITLE}: Processing payload...`);
-                Hooks.callAll("ttrpgVault.processPayload", payload, {
-                  dialog,
-                  file: selectedFile
+                const result = await importPayloadToCompendiums(payload, {
+                  targetPack,
+                  taxonomy,
+                  deduplication,
+                  onProgress: ({ current, total, name, percent }) => {
+                    if (progressFill) progressFill.style.width = `${percent}%`;
+                    if (progressLabel) progressLabel.textContent = `${percent}% (${current}/${total}: ${name})`;
+                  }
                 });
-                ui.notifications.info(`${MODULE_TITLE}: Ingestion complete!`);
+                ui.notifications.info(
+                  `${MODULE_TITLE}: Successfully imported ${result.created + result.updated} entries (${result.created} created, ${result.updated} updated, ${result.skipped} skipped).`
+                );
+                Hooks.callAll("ttrpgVault.importComplete", result);
                 dialog.close();
               } catch (err) {
-                logger.error("Failed to parse import payload:", err);
+                logger.error("Failed to import payload into compendiums:", err);
                 ui.notifications.error(`Failed to import: ${err.message}`);
                 if (submitBtn) submitBtn.disabled = false;
               }
@@ -656,6 +827,7 @@ const api = {
   generateSpellFallback,
   generateWeaponFallback,
   generateFeatFallback,
+  importPayload: importPayloadToCompendiums,
   injectButton: injectCompendiumImportButton,
   openImportDialog() {
     logger.info("Opening TTRPG Vault Import Dialog");
@@ -685,18 +857,11 @@ if (typeof Hooks !== "undefined") {
     if (module) {
       module.api = api;
     }
-    setTimeout(() => {
-      injectCompendiumImportButton();
-    }, 250);
+    setTimeout(injectCompendiumImportButton, 350);
     Hooks.callAll("ttrpgVault.ready", api);
   });
-  Hooks.on("renderCompendiumDirectory", (app, html, data) => {
-    injectCompendiumImportButton(html);
-  });
-  Hooks.on("renderSidebarTab", (app, html, data) => {
-    if ((app == null ? void 0 : app.tabName) === "compendium" || (app == null ? void 0 : app.id) === "compendium" || (html == null ? void 0 : html.id) === "compendium") {
-      injectCompendiumImportButton(html);
-    }
+  Hooks.on("renderCompendiumDirectory", () => {
+    injectCompendiumImportButton();
   });
 }
 export {
@@ -708,6 +873,7 @@ export {
   api as default,
   generateFeatFallback,
   generateSpellFallback,
-  generateWeaponFallback
+  generateWeaponFallback,
+  importPayloadToCompendiums
 };
 //# sourceMappingURL=module.mjs.map
