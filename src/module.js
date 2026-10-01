@@ -237,15 +237,24 @@ export async function importPayloadToCompendiums(payload, options = {}) {
     const sanitizeActivities = (sys) => {
       if (sys?.activities && typeof sys.activities === 'object') {
         const cleanActs = {};
+        const seenIds = new Set();
+        const aliasKeys = new Set(['attackAct', 'damageAct', 'saveAct', 'healAct', 'utilAct', 'castAct', 'spellAct']);
         for (const [k, v] of Object.entries(sys.activities)) {
-          if (v && typeof v === 'object') {
-            const actId = v._id || k;
-            if (/^[a-zA-Z0-9]{16}$/.test(actId)) {
-              v._id = actId;
-              cleanActs[actId] = v;
-            } else if (k !== 'utilAct' && k !== 'healAct' && k !== 'castAct') {
-              cleanActs[k] = v;
+          if (!v || typeof v !== 'object') continue;
+          let actId = v._id;
+          if (!actId || !/^[a-zA-Z0-9]{16}$/.test(actId)) {
+            if (/^[a-zA-Z0-9]{16}$/.test(k)) {
+              actId = k;
+            } else if (!aliasKeys.has(k)) {
+              actId = typeof foundry !== 'undefined' && foundry?.utils?.randomID
+                ? foundry.utils.randomID()
+                : Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
             }
+          }
+          if (actId && /^[a-zA-Z0-9]{16}$/.test(actId) && !seenIds.has(actId)) {
+            v._id = actId;
+            cleanActs[actId] = v;
+            seenIds.add(actId);
           }
         }
         sys.activities = cleanActs;
@@ -255,7 +264,12 @@ export async function importPayloadToCompendiums(payload, options = {}) {
     sanitizeActivities(docData.system);
     if (Array.isArray(docData.items)) {
       for (const itm of docData.items) {
-        if (itm) sanitizeActivities(itm.system);
+        if (itm) {
+          if (itm._id && !/^[a-zA-Z0-9]{16}$/.test(itm._id)) {
+            delete itm._id;
+          }
+          sanitizeActivities(itm.system);
+        }
       }
     }
 
@@ -304,6 +318,7 @@ export async function importPayloadToCompendiums(payload, options = {}) {
       );
     }
 
+    let processedDoc = null;
     if (existingEntry) {
       if (deduplication === 'skip') {
         skippedCount++;
@@ -326,7 +341,11 @@ export async function importPayloadToCompendiums(payload, options = {}) {
           } else {
             await existingDoc.update(docData);
           }
+          processedDoc = existingDoc;
           updatedCount++;
+          if (entities.length === 1 && (options.autoOpen ?? true)) {
+            try { existingDoc.sheet?.render(true); } catch (e) {}
+          }
           continue;
         }
       }
@@ -338,8 +357,11 @@ export async function importPayloadToCompendiums(payload, options = {}) {
     }
 
     // Create document in compendium
-    await pack.documentClass.create(docData, { pack: pack.collection });
+    const createdDoc = await pack.documentClass.create(docData, { pack: pack.collection });
     createdCount++;
+    if (entities.length === 1 && (options.autoOpen ?? true) && createdDoc) {
+      try { createdDoc.sheet?.render(true); } catch (e) {}
+    }
   }
 
   // Refresh all affected packs in UI
@@ -514,7 +536,7 @@ class VaultImportDialog {
                 });
 
                 ui.notifications.info(
-                  `${MODULE_TITLE}: Successfully imported ${result.created + result.updated} entries (${result.created} created, ${result.updated} updated, ${result.skipped} skipped).`
+                  `${MODULE_TITLE}: Successfully imported ${result.created + result.updated} entries (${result.created} created, ${result.updated} updated) into compendium. Opening sheet...`
                 );
 
                 Hooks.callAll('ttrpgVault.importComplete', result);

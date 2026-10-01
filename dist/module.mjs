@@ -505,7 +505,7 @@ async function preloadTemplates() {
   return loadTemplates(templatePaths);
 }
 async function importPayloadToCompendiums(payload, options = {}) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r;
   const targetPackOption = options.targetPack || "auto";
   const taxonomy = options.taxonomy || "source";
   const deduplication = options.deduplication || "update";
@@ -598,17 +598,25 @@ async function importPayloadToCompendiums(payload, options = {}) {
     }
     const docData = typeof foundry !== "undefined" && ((_b = foundry == null ? void 0 : foundry.utils) == null ? void 0 : _b.deepClone) ? foundry.utils.deepClone(rawDoc) : JSON.parse(JSON.stringify(rawDoc));
     const sanitizeActivities = (sys) => {
+      var _a2;
       if ((sys == null ? void 0 : sys.activities) && typeof sys.activities === "object") {
         const cleanActs = {};
+        const seenIds = /* @__PURE__ */ new Set();
+        const aliasKeys = /* @__PURE__ */ new Set(["attackAct", "damageAct", "saveAct", "healAct", "utilAct", "castAct", "spellAct"]);
         for (const [k, v] of Object.entries(sys.activities)) {
-          if (v && typeof v === "object") {
-            const actId = v._id || k;
-            if (/^[a-zA-Z0-9]{16}$/.test(actId)) {
-              v._id = actId;
-              cleanActs[actId] = v;
-            } else if (k !== "utilAct" && k !== "healAct" && k !== "castAct") {
-              cleanActs[k] = v;
+          if (!v || typeof v !== "object") continue;
+          let actId = v._id;
+          if (!actId || !/^[a-zA-Z0-9]{16}$/.test(actId)) {
+            if (/^[a-zA-Z0-9]{16}$/.test(k)) {
+              actId = k;
+            } else if (!aliasKeys.has(k)) {
+              actId = typeof foundry !== "undefined" && ((_a2 = foundry == null ? void 0 : foundry.utils) == null ? void 0 : _a2.randomID) ? foundry.utils.randomID() : Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
             }
+          }
+          if (actId && /^[a-zA-Z0-9]{16}$/.test(actId) && !seenIds.has(actId)) {
+            v._id = actId;
+            cleanActs[actId] = v;
+            seenIds.add(actId);
           }
         }
         sys.activities = cleanActs;
@@ -617,7 +625,12 @@ async function importPayloadToCompendiums(payload, options = {}) {
     sanitizeActivities(docData.system);
     if (Array.isArray(docData.items)) {
       for (const itm of docData.items) {
-        if (itm) sanitizeActivities(itm.system);
+        if (itm) {
+          if (itm._id && !/^[a-zA-Z0-9]{16}$/.test(itm._id)) {
+            delete itm._id;
+          }
+          sanitizeActivities(itm.system);
+        }
       }
     }
     if (taxonomy !== "flat" && pack.folders) {
@@ -688,6 +701,12 @@ async function importPayloadToCompendiums(payload, options = {}) {
             await existingDoc.update(docData);
           }
           updatedCount++;
+          if (entities.length === 1 && (options.autoOpen ?? true)) {
+            try {
+              (_p = existingDoc.sheet) == null ? void 0 : _p.render(true);
+            } catch (e) {
+            }
+          }
           continue;
         }
       }
@@ -695,8 +714,14 @@ async function importPayloadToCompendiums(payload, options = {}) {
     if (deduplication === "duplicate" || !docData._id || !/^[a-zA-Z0-9]{16}$/.test(docData._id)) {
       delete docData._id;
     }
-    await pack.documentClass.create(docData, { pack: pack.collection });
+    const createdDoc = await pack.documentClass.create(docData, { pack: pack.collection });
     createdCount++;
+    if (entities.length === 1 && (options.autoOpen ?? true) && createdDoc) {
+      try {
+        (_q = createdDoc.sheet) == null ? void 0 : _q.render(true);
+      } catch (e) {
+      }
+    }
   }
   for (const pack of affectedPacks) {
     try {
@@ -707,7 +732,7 @@ async function importPayloadToCompendiums(payload, options = {}) {
     } catch (e) {
     }
   }
-  (_p = ui.compendium) == null ? void 0 : _p.render(false);
+  (_r = ui.compendium) == null ? void 0 : _r.render(false);
   return {
     total: entities.length,
     created: createdCount,
@@ -837,7 +862,7 @@ class VaultImportDialog {
                   }
                 });
                 ui.notifications.info(
-                  `${MODULE_TITLE}: Successfully imported ${result.created + result.updated} entries (${result.created} created, ${result.updated} updated, ${result.skipped} skipped).`
+                  `${MODULE_TITLE}: Successfully imported ${result.created + result.updated} entries (${result.created} created, ${result.updated} updated) into compendium. Opening sheet...`
                 );
                 Hooks.callAll("ttrpgVault.importComplete", result);
                 dialog.close();
