@@ -1,0 +1,60 @@
+<form class="vault-import-form">
+  <div class="vault-dropzone" id="vault-dropzone">
+    <div class="vault-dropzone-icon">
+      <i class="fas fa-file-import"></i>
+    </div>
+    <div class="vault-dropzone-text">
+      {{localize "VAULT.Dialog.DropPrompt"}}
+    </div>
+    <input type="file" id="vault-file-picker" accept=".json,.zip" style="display: none;" />
+  </div>
+
+  <div class="vault-selected-preview" style="display: none; margin-bottom: 12px; font-size: 12px; color: var(--vault-text-muted);">
+    <i class="fas fa-check-circle" style="color: var(--vault-success);"></i>
+    <span class="vault-preview-text"></span>
+  </div>
+
+  <div class="vault-form-group">
+    <label for="vault-target-pack">{{localize "VAULT.Dialog.TargetPack"}}</label>
+    <select name="targetPack" id="vault-target-pack">
+      <option value="auto">{{localize "VAULT.Dialog.TargetPackAuto"}}</option>
+      <option value="vault-monsters">{{localize "VAULT.Packs.Monsters"}}</option>
+      <option value="vault-spells">{{localize "VAULT.Packs.Spells"}}</option>
+      <option value="vault-items">{{localize "VAULT.Packs.Items"}}</option>
+      <option value="vault-journals">{{localize "VAULT.Packs.Journals"}}</option>
+    </select>
+  </div>
+
+  <div class="vault-form-group">
+    <label for="vault-taxonomy">{{localize "VAULT.Dialog.Taxonomy"}}</label>
+    <select name="taxonomy" id="vault-taxonomy">
+      <option value="source">{{localize "VAULT.Dialog.TaxonomySource"}}</option>
+      <option value="type">{{localize "VAULT.Dialog.TaxonomyType"}}</option>
+      <option value="cr">{{localize "VAULT.Dialog.TaxonomyCr"}}</option>
+      <option value="flat">{{localize "VAULT.Dialog.TaxonomyFlat"}}</option>
+    </select>
+  </div>
+
+  <div class="vault-form-group">
+    <label for="vault-deduplication">{{localize "VAULT.Dialog.DeduplicationMode"}}</label>
+    <select name="deduplication" id="vault-deduplication">
+      <option value="update" selected>{{localize "VAULT.Settings.Deduplication.Update"}}</option>
+      <option value="skip">{{localize "VAULT.Settings.Deduplication.Skip"}}</option>
+      <option value="duplicate">{{localize "VAULT.Settings.Deduplication.Duplicate"}}</option>
+    </select>
+  </div>
+
+  <div class="vault-progress-container" id="vault-progress-container" style="display: none;">
+    <div class="vault-progress-fill" id="vault-progress-fill"></div>
+    <div class="vault-progress-label" id="vault-progress-label">0%</div>
+  </div>
+
+  <footer class="sheet-footer flexrow" style="margin-top: 16px; gap: 8px;">
+    <button type="submit" id="vault-start-import-btn" class="vault-import-btn" style="flex: 2;">
+      <i class="fas fa-file-upload"></i> {{localize "VAULT.Dialog.StartImport"}}
+    </button>
+    <button type="button" class="vault-cancel-btn" id="vault-cancel-btn" style="flex: 1;">
+      {{localize "VAULT.Dialog.Cancel"}}
+    </button>
+  </footer>
+</form>

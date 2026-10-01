@@ -1,0 +1,8 @@
+# Foundry TTRPG Vault Module .gitignore
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+*.tmp
+foundry-ttrpg-vault.zip
+dist/*.zip

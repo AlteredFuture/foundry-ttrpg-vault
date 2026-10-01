@@ -1,0 +1,129 @@
+{
+  "id": "foundry-ttrpg-vault",
+  "title": "TTRPG Vault: Compendium & Automation Bridge",
+  "description": "High-performance compendium manager and automation bridge connecting TTRPG Vault desktop with Foundry VTT compendiums and dnd5e data models.",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "11.315",
+    "verified": "12.331",
+    "maximum": "13"
+  },
+  "authors": [
+    {
+      "name": "TTRPG Vault Team",
+      "url": "https://github.com/AlteredFuture/foundry-ttrpg-vault",
+      "discord": "ttrpgvault"
+    }
+  ],
+  "relationships": {
+    "systems": [
+      {
+        "id": "dnd5e",
+        "type": "system",
+        "manifest": "https://raw.githubusercontent.com/foundryvtt/dnd5e/master/system.json",
+        "compatibility": {
+          "minimum": "3.0.0",
+          "verified": "4.1.2"
+        }
+      }
+    ],
+    "requires": [],
+    "flags": {}
+  },
+  "esmodules": [
+    "dist/module.mjs"
+  ],
+  "styles": [
+    "styles/vault-bridge.css"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "languages/en.json"
+    }
+  ],
+  "packs": [
+    {
+      "name": "vault-monsters",
+      "label": "TTRPG Vault: Monsters & NPCs",
+      "path": "packs/vault-monsters",
+      "type": "Actor",
+      "system": "dnd5e",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      },
+      "flags": {
+        "ttrpgVault": {
+          "entityType": "monster"
+        }
+      }
+    },
+    {
+      "name": "vault-spells",
+      "label": "TTRPG Vault: Spells & Magic",
+      "path": "packs/vault-spells",
+      "type": "Item",
+      "system": "dnd5e",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      },
+      "flags": {
+        "ttrpgVault": {
+          "entityType": "spell"
+        }
+      }
+    },
+    {
+      "name": "vault-items",
+      "label": "TTRPG Vault: Items & Equipment",
+      "path": "packs/vault-items",
+      "type": "Item",
+      "system": "dnd5e",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      },
+      "flags": {
+        "ttrpgVault": {
+          "entityType": "item"
+        }
+      }
+    },
+    {
+      "name": "vault-journals",
+      "label": "TTRPG Vault: Source Documents & Rules",
+      "path": "packs/vault-journals",
+      "type": "JournalEntry",
+      "ownership": {
+        "PLAYER": "OBSERVER",
+        "ASSISTANT": "OWNER"
+      },
+      "flags": {
+        "ttrpgVault": {
+          "entityType": "journal"
+        }
+      }
+    }
+  ],
+  "packFolders": [
+    {
+      "name": "TTRPG Vault Compendiums",
+      "sorting": "m",
+      "color": "#7B1812",
+      "packs": [
+        "vault-monsters",
+        "vault-spells",
+        "vault-items",
+        "vault-journals"
+      ]
+    }
+  ],
+  "url": "https://github.com/AlteredFuture/foundry-ttrpg-vault",
+  "manifest": "https://raw.githubusercontent.com/AlteredFuture/foundry-ttrpg-vault/main/module.json",
+  "download": "https://github.com/AlteredFuture/foundry-ttrpg-vault/releases/latest/download/foundry-ttrpg-vault.zip",
+  "readme": "README.md",
+  "license": "MIT"
+}

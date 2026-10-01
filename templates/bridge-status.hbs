@@ -1,0 +1,11 @@
+<div class="vault-bridge-status-widget">
+  <div class="vault-status-pill {{status}}">
+    <i class="fas {{icon}}"></i>
+    <span>{{statusLabel}}</span>
+  </div>
+  {{#if port}}
+  <span class="vault-port-indicator" style="font-size: 10px; color: var(--vault-text-muted); margin-left: 6px;">
+    (:{{port}})
+  </span>
+  {{/if}}
+</div>

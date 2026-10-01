@@ -1,0 +1,63 @@
+{
+  "VAULT": {
+    "Title": "TTRPG Vault: Compendium & Automation Bridge",
+    "Description": "Bridge and compendium manager connecting TTRPG Vault desktop with Foundry VTT worlds.",
+    "Settings": {
+      "BridgePort": {
+        "Name": "Bridge Loopback Port",
+        "Hint": "Local loopback WebSocket port used by TTRPG Vault desktop application (default: 41782)."
+      },
+      "AuthToken": {
+        "Name": "Pairing Authentication Token",
+        "Hint": "Shared secret token matching the pairing token configured in TTRPG Vault desktop settings."
+      },
+      "AutoOpen": {
+        "Name": "Auto-Open Imported Sheets",
+        "Hint": "Automatically open document sheets when single entities are pushed from TTRPG Vault."
+      },
+      "Deduplication": {
+        "Name": "Default Deduplication Mode",
+        "Hint": "Strategy for importing documents when an entry with matching sourceId already exists in compendium.",
+        "Update": "Update existing document in-place (Recommended)",
+        "Skip": "Skip existing document",
+        "Duplicate": "Always create duplicate document"
+      },
+      "MidiAutomation": {
+        "Name": "Enable Midi-QOL Automation",
+        "Hint": "Automatically configure Midi-QOL workflow flags and action triggers when Midi-QOL is active."
+      },
+      "DebugMode": {
+        "Name": "Debug Logging",
+        "Hint": "Enable verbose console logging for troubleshooting bridge events and imports."
+      }
+    },
+    "Dialog": {
+      "OpenButton": "Import from Vault",
+      "OpenButtonHint": "Open TTRPG Vault Compendium Import Dialog",
+      "Title": "TTRPG Vault: Ingest Content",
+      "DropPrompt": "Drag & drop a TTRPG Vault .json or .zip bundle here, or click to browse",
+      "SelectedFile": "Selected file",
+      "TargetPack": "Target Compendium Pack",
+      "TargetPackAuto": "Auto-detect from entity type",
+      "Taxonomy": "Compendium Folder Organization",
+      "TaxonomySource": "Group by Source Document",
+      "TaxonomyType": "Group by Creature / Item Type",
+      "TaxonomyCr": "Group by Challenge Rating",
+      "TaxonomyFlat": "No Folders (Flat Root)",
+      "DeduplicationMode": "Deduplication Mode",
+      "StartImport": "Start Import",
+      "Cancel": "Cancel"
+    },
+    "Status": {
+      "Connected": "Connected to Desktop Vault",
+      "Disconnected": "Desktop Vault Disconnected",
+      "Syncing": "Syncing Payload..."
+    },
+    "Packs": {
+      "Monsters": "TTRPG Vault: Monsters & NPCs",
+      "Spells": "TTRPG Vault: Spells & Magic",
+      "Items": "TTRPG Vault: Items & Equipment",
+      "Journals": "TTRPG Vault: Source Documents & Rules"
+    }
+  }
+}
