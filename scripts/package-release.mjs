@@ -192,7 +192,10 @@ function collectFiles(dir, baseDir = dir, excludes = []) {
     const fullPath = path.join(dir, entry.name);
     const rel = path.relative(baseDir, fullPath).replace(/\\/g, '/');
 
-    if (excludes.some(ex => rel === ex || rel.startsWith(ex + '/') || entry.name === ex || rel.split('/').includes(ex))) {
+    if (excludes.some(ex => {
+      if (typeof ex === 'function') return ex(entry.name, rel);
+      return rel === ex || rel.startsWith(ex + '/') || entry.name === ex || rel.split('/').includes(ex);
+    })) {
       continue;
     }
 
@@ -270,7 +273,9 @@ export async function packageRelease(options = {}) {
   for (const dirName of includeDirs) {
     const dirPath = path.join(rootDir, dirName);
     // Exclude packs/_source and LevelDB runtime LOCK/LOG files from distribution zip
-    const excludes = dirName === 'packs' ? ['packs/_source', '_source', 'LOCK', 'LOG', 'LOG.old'] : ['LOCK'];
+    const excludes = dirName === 'packs'
+      ? ['packs/_source', '_source', 'LOCK', 'LOG', 'LOG.old', 'CURRENT', (name) => name.startsWith('MANIFEST-') || name.endsWith('.log')]
+      : ['LOCK'];
     const collected = collectFiles(dirPath, rootDir, excludes);
 
     for (const f of collected) {

@@ -126,24 +126,38 @@ export async function importPayloadToCompendiums(payload, options = {}) {
   if (Array.isArray(payload)) {
     entities = payload;
   } else if (payload && typeof payload === 'object') {
-    if (Array.isArray(payload.successes)) {
-      entities = payload.successes;
-    } else if (Array.isArray(payload.actors)) {
-      entities = payload.actors;
-    } else if (Array.isArray(payload.monsters)) {
-      entities = payload.monsters;
-    } else if (Array.isArray(payload.items)) {
-      entities = payload.items;
-    } else if (Array.isArray(payload.spells)) {
-      entities = payload.spells;
-    } else if (Array.isArray(payload.journals)) {
-      entities = payload.journals;
-    } else if (payload.name) {
+    // Check if the payload is a single document first.
+    // In Foundry, an Actor or Item has a name and either type, system, or pages.
+    // It is critical to check this BEFORE checking payload.items, because Actors
+    // have an embedded items array (actor.items) representing their weapons/traits!
+    const isSingleDoc = Boolean(
+      payload.name &&
+      (payload.type || payload.system || payload.pages || payload._id)
+    );
+
+    if (isSingleDoc) {
       entities = [payload];
+    } else if (Array.isArray(payload.successes)) {
+      entities = payload.successes;
     } else {
-      for (const val of Object.values(payload)) {
-        if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object') {
-          entities.push(...val);
+      let foundBundle = false;
+      const bundleKeys = ['actors', 'monsters', 'items', 'spells', 'journals', 'entities'];
+      for (const key of bundleKeys) {
+        if (Array.isArray(payload[key])) {
+          entities.push(...payload[key]);
+          foundBundle = true;
+        }
+      }
+
+      if (!foundBundle) {
+        if (payload.name) {
+          entities = [payload];
+        } else {
+          for (const val of Object.values(payload)) {
+            if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object') {
+              entities.push(...val);
+            }
+          }
         }
       }
     }
@@ -217,7 +231,33 @@ export async function importPayloadToCompendiums(payload, options = {}) {
     }
 
     // 4. Clone doc data
-    const docData = foundry.utils ? foundry.utils.deepClone(rawDoc) : JSON.parse(JSON.stringify(rawDoc));
+    const docData = typeof foundry !== 'undefined' && foundry?.utils?.deepClone ? foundry.utils.deepClone(rawDoc) : JSON.parse(JSON.stringify(rawDoc));
+
+    // 4b. Sanitize activities to conform to Foundry dnd5e schema
+    const sanitizeActivities = (sys) => {
+      if (sys?.activities && typeof sys.activities === 'object') {
+        const cleanActs = {};
+        for (const [k, v] of Object.entries(sys.activities)) {
+          if (v && typeof v === 'object') {
+            const actId = v._id || k;
+            if (/^[a-zA-Z0-9]{16}$/.test(actId)) {
+              v._id = actId;
+              cleanActs[actId] = v;
+            } else if (k !== 'utilAct' && k !== 'healAct' && k !== 'castAct') {
+              cleanActs[k] = v;
+            }
+          }
+        }
+        sys.activities = cleanActs;
+      }
+    };
+
+    sanitizeActivities(docData.system);
+    if (Array.isArray(docData.items)) {
+      for (const itm of docData.items) {
+        if (itm) sanitizeActivities(itm.system);
+      }
+    }
 
     // 5. Taxonomy Folder Assignment
     if (taxonomy !== 'flat' && pack.folders) {
@@ -272,7 +312,20 @@ export async function importPayloadToCompendiums(payload, options = {}) {
         const existingDoc = await pack.getDocument(existingEntry._id);
         if (existingDoc) {
           delete docData._id;
-          await existingDoc.update(docData);
+          if (Array.isArray(docData.items) && docData.items.length > 0 && typeof existingDoc.deleteEmbeddedDocuments === 'function') {
+            const currentItemIds = existingDoc.items ? existingDoc.items.map((i) => i.id) : [];
+            if (currentItemIds.length > 0) {
+              await existingDoc.deleteEmbeddedDocuments('Item', currentItemIds);
+            }
+            const itemsToCreate = docData.items;
+            delete docData.items;
+            await existingDoc.update(docData);
+            if (itemsToCreate.length > 0) {
+              await existingDoc.createEmbeddedDocuments('Item', itemsToCreate);
+            }
+          } else {
+            await existingDoc.update(docData);
+          }
           updatedCount++;
           continue;
         }

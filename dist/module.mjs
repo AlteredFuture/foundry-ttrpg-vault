@@ -505,7 +505,7 @@ async function preloadTemplates() {
   return loadTemplates(templatePaths);
 }
 async function importPayloadToCompendiums(payload, options = {}) {
-  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p;
   const targetPackOption = options.targetPack || "auto";
   const taxonomy = options.taxonomy || "source";
   const deduplication = options.deduplication || "update";
@@ -515,24 +515,31 @@ async function importPayloadToCompendiums(payload, options = {}) {
   if (Array.isArray(payload)) {
     entities = payload;
   } else if (payload && typeof payload === "object") {
-    if (Array.isArray(payload.successes)) {
-      entities = payload.successes;
-    } else if (Array.isArray(payload.actors)) {
-      entities = payload.actors;
-    } else if (Array.isArray(payload.monsters)) {
-      entities = payload.monsters;
-    } else if (Array.isArray(payload.items)) {
-      entities = payload.items;
-    } else if (Array.isArray(payload.spells)) {
-      entities = payload.spells;
-    } else if (Array.isArray(payload.journals)) {
-      entities = payload.journals;
-    } else if (payload.name) {
+    const isSingleDoc = Boolean(
+      payload.name && (payload.type || payload.system || payload.pages || payload._id)
+    );
+    if (isSingleDoc) {
       entities = [payload];
+    } else if (Array.isArray(payload.successes)) {
+      entities = payload.successes;
     } else {
-      for (const val of Object.values(payload)) {
-        if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object") {
-          entities.push(...val);
+      let foundBundle = false;
+      const bundleKeys = ["actors", "monsters", "items", "spells", "journals", "entities"];
+      for (const key of bundleKeys) {
+        if (Array.isArray(payload[key])) {
+          entities.push(...payload[key]);
+          foundBundle = true;
+        }
+      }
+      if (!foundBundle) {
+        if (payload.name) {
+          entities = [payload];
+        } else {
+          for (const val of Object.values(payload)) {
+            if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object") {
+              entities.push(...val);
+            }
+          }
         }
       }
     }
@@ -589,15 +596,38 @@ async function importPayloadToCompendiums(payload, options = {}) {
         logger.warn(`Could not unlock pack ${pack.collection}:`, err);
       }
     }
-    const docData = foundry.utils ? foundry.utils.deepClone(rawDoc) : JSON.parse(JSON.stringify(rawDoc));
+    const docData = typeof foundry !== "undefined" && ((_b = foundry == null ? void 0 : foundry.utils) == null ? void 0 : _b.deepClone) ? foundry.utils.deepClone(rawDoc) : JSON.parse(JSON.stringify(rawDoc));
+    const sanitizeActivities = (sys) => {
+      if ((sys == null ? void 0 : sys.activities) && typeof sys.activities === "object") {
+        const cleanActs = {};
+        for (const [k, v] of Object.entries(sys.activities)) {
+          if (v && typeof v === "object") {
+            const actId = v._id || k;
+            if (/^[a-zA-Z0-9]{16}$/.test(actId)) {
+              v._id = actId;
+              cleanActs[actId] = v;
+            } else if (k !== "utilAct" && k !== "healAct" && k !== "castAct") {
+              cleanActs[k] = v;
+            }
+          }
+        }
+        sys.activities = cleanActs;
+      }
+    };
+    sanitizeActivities(docData.system);
+    if (Array.isArray(docData.items)) {
+      for (const itm of docData.items) {
+        if (itm) sanitizeActivities(itm.system);
+      }
+    }
     if (taxonomy !== "flat" && pack.folders) {
       let folderName = null;
       if (taxonomy === "source") {
-        folderName = ((_c = (_b = docData.flags) == null ? void 0 : _b.ttrpgVault) == null ? void 0 : _c.source) || ((_e = (_d = docData.system) == null ? void 0 : _d.details) == null ? void 0 : _e.source) || "Source Documents";
+        folderName = ((_d = (_c = docData.flags) == null ? void 0 : _c.ttrpgVault) == null ? void 0 : _d.source) || ((_f = (_e = docData.system) == null ? void 0 : _e.details) == null ? void 0 : _f.source) || "Source Documents";
       } else if (taxonomy === "type") {
-        folderName = ((_h = (_g = (_f = docData.system) == null ? void 0 : _f.details) == null ? void 0 : _g.type) == null ? void 0 : _h.value) || docData.type || "Entities";
+        folderName = ((_i = (_h = (_g = docData.system) == null ? void 0 : _g.details) == null ? void 0 : _h.type) == null ? void 0 : _i.value) || docData.type || "Entities";
       } else if (taxonomy === "cr") {
-        folderName = ((_j = (_i = docData.system) == null ? void 0 : _i.details) == null ? void 0 : _j.cr) != null ? `CR ${docData.system.details.cr}` : "CR Unrated";
+        folderName = ((_k = (_j = docData.system) == null ? void 0 : _j.details) == null ? void 0 : _k.cr) != null ? `CR ${docData.system.details.cr}` : "CR Unrated";
       }
       if (folderName) {
         let folder = pack.folders.find((f) => f.name.toLowerCase() === folderName.toLowerCase());
@@ -614,7 +644,7 @@ async function importPayloadToCompendiums(payload, options = {}) {
       }
     }
     const index = await pack.getIndex({ fields: ["name", "flags"] });
-    const sourceId = ((_l = (_k = docData.flags) == null ? void 0 : _k.ttrpgVault) == null ? void 0 : _l.sourceId) || ((_n = (_m = docData.flags) == null ? void 0 : _m.ttrpgVault) == null ? void 0 : _n.source_id);
+    const sourceId = ((_m = (_l = docData.flags) == null ? void 0 : _l.ttrpgVault) == null ? void 0 : _m.sourceId) || ((_o = (_n = docData.flags) == null ? void 0 : _n.ttrpgVault) == null ? void 0 : _o.source_id);
     let existingEntry = null;
     if (sourceId) {
       existingEntry = index.find(
@@ -643,7 +673,20 @@ async function importPayloadToCompendiums(payload, options = {}) {
         const existingDoc = await pack.getDocument(existingEntry._id);
         if (existingDoc) {
           delete docData._id;
-          await existingDoc.update(docData);
+          if (Array.isArray(docData.items) && docData.items.length > 0 && typeof existingDoc.deleteEmbeddedDocuments === "function") {
+            const currentItemIds = existingDoc.items ? existingDoc.items.map((i2) => i2.id) : [];
+            if (currentItemIds.length > 0) {
+              await existingDoc.deleteEmbeddedDocuments("Item", currentItemIds);
+            }
+            const itemsToCreate = docData.items;
+            delete docData.items;
+            await existingDoc.update(docData);
+            if (itemsToCreate.length > 0) {
+              await existingDoc.createEmbeddedDocuments("Item", itemsToCreate);
+            }
+          } else {
+            await existingDoc.update(docData);
+          }
           updatedCount++;
           continue;
         }
@@ -664,7 +707,7 @@ async function importPayloadToCompendiums(payload, options = {}) {
     } catch (e) {
     }
   }
-  (_o = ui.compendium) == null ? void 0 : _o.render(false);
+  (_p = ui.compendium) == null ? void 0 : _p.render(false);
   return {
     total: entities.length,
     created: createdCount,
